@@ -13,4 +13,5 @@ await build({
 })
 await copyFile('descriptor.json', 'dist/descriptor.json')
 await copyFile('index.html', 'dist/index.html')
+await copyFile('screenshot.png', 'dist/screenshot.png')
 console.log('dist/index.js を作りました')

@@ -5,6 +5,7 @@
   "version": "1.0.0",
   "apiVersion": "2.0.0",
   "description": "フォルマントの3つのピークが、ゆっくりランダムに揺らぎながら変わっていくエフェクト / Three formant-like peaks that slowly and randomly wander over time",
+  "thumbnail": "https://ptom76.github.io/wam-formantdrift/screenshot.png",
   "website": "https://github.com/PTOM76/wam-formantdrift",
   "keywords": ["formant", "voice", "filter", "drift", "random"],
   "isInstrument": false,

@@ -4,6 +4,8 @@
 - ID: `net.pitan76.formantdrift`
 - 種別: エフェクト（音声の入力と出力。MIDI は使わない）
 
+![Formant Drift](screenshot.png)
+
 ## つまみ
 | 名前 | 範囲 | 内容 |
 | --- | --- | --- |
@@ -20,7 +22,8 @@
 ```sh
 npm ci
 npm run build   # dist/index.js と dist/descriptor.json を作る（SDK を同梱した ES モジュール）
-node test/run.mjs   # Chrome（headless）で OfflineAudioContext に通し、音が出ることと、スペクトルが動くことを確かめる
+npm test   # Chrome（headless）で OfflineAudioContext に通し、音が出ることと、スペクトルが動くことを確かめる
+npm run screenshot   # 画面を撮り直して screenshot.png に保存する
 ```
 
 main に push すると、GitHub Actions が `dist/` を GitHub Pages で公開する。ホストには、公開された `index.js` の URL を渡す。
