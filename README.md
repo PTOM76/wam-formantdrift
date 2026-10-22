@@ -1,8 +1,8 @@
 # Formant Drift
-声のフォルマントにあたる 3 つの山が、ゆっくりランダムに揺らぎながら変わっていく Web Audio Module（WAM2）のエフェクト。WeVocal 専用ではなく、WAM2 に対応するホストならどれでも読み込める。
+フォルマントにあたる3つの山が、ゆっくりランダムに揺らぎながら変わっていく Web Audio Module（WAM2）のエフェクト
 
 - ID: `net.pitan76.formantdrift`
-- 種別: エフェクト（音声の入力と出力。MIDI は使わない）
+- 種別: エフェクト
 
 ![Formant Drift](screenshot.png)
 
