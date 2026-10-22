@@ -1,12 +1,12 @@
 {
   "name": "wevocal-wam-formantdrift",
   "private": true,
-  "version": "1.0.1",
+  "version": "1.0.2",
   "type": "module",
   "scripts": {
     "build": "node build.mjs",
     "screenshot": "node test/screenshot.mjs",
-    "test": "node test/run.mjs && node test/offline.mjs && node test/seed.mjs && node test/interact.mjs"
+    "test": "node test/run.mjs && node test/offline.mjs && node test/formants.mjs && node test/interact.mjs"
   },
   "dependencies": {
     "@webaudiomodules/api": "^2.0.0-alpha.6",

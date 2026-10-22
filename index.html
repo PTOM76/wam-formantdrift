@@ -24,16 +24,19 @@ https://ptom76.github.io/wam-formantdrift/index.js
 <pre>
 Peak   0 - 24 dB    Height of the peaks
 Sharp  0.3 - 3      Sharpness of the peaks (multiplier of Q)
-Drift  0 - 1        How far the peaks wander (1 = the whole range)
-Rate   0.02 - 3 Hz  How often a new target is chosen
+Drift  0 - 1        How far the peaks wander around F1-F3 (0 = fixed, 1 = the whole range)
+Rate   0.02 - 3 Hz  Speed of the wandering
 Mix    0 - 1        Amount of the effect
-Seed   0 - 99       Seed of the random drift. The same seed always gives the same movement
+F1     280 - 900 Hz   Center of the first peak (drag the F1 marker, or type a value)
+F2     800 - 2700 Hz  Center of the second peak
+F3     2300 - 3600 Hz Center of the third peak
+Random button         Picks new F1-F3 at random. The result is saved like any other value
 </pre>
 
 		<h2>How it works</h2>
 		Three peaking filters sit in the ranges of the vowel formants (F1 280-900 Hz, F2 800-2700 Hz, F3 2300-3600 Hz).<br />
-		A looping random waveform moves each filter's frequency smoothly, on the audio thread, so it also works in offline rendering.<br />
-		The randomness is seeded, so the same Seed gives the same drift every time (counted from when the plugin is created).
+		Each filter wanders smoothly around its F value with a slow sine, each at a slightly different speed and phase, on the audio thread, so it also works in offline rendering.<br />
+		Nothing is random unless you press Random, so the sound is always reproducible.
 
 		<h2>Info</h2>
 <pre>

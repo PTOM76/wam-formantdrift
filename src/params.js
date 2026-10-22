@@ -14,35 +14,35 @@ export const PARAMS = [
   { id: 'depth', label: 'Drift', min: 0, max: 1, def: 0.8, percent: true },
   { id: 'rate', label: 'Rate', min: 0.02, max: 3, def: 0.3, unit: 'Hz', digits: 2, log: true },
   { id: 'mix', label: 'Mix', min: 0, max: 1, def: 1, percent: true },
-  // step: 整数のつまみ。ゆらぎの乱数の種で、同じ値なら毎回同じ動きになる
-  { id: 'seed', label: 'Seed', min: 0, max: 99, def: 0, digits: 0, unit: '', step: 1 },
+  // 山の中心周波数（画面のつまみの列には出さず、ディスプレイと数値入力で操作する）。値は保存されるので、いつも同じ音になる
+  { id: 'f1', label: 'F1', min: BANDS[0].min, max: BANDS[0].max, def: Math.round(Math.sqrt(BANDS[0].min * BANDS[0].max)), unit: 'Hz', digits: 0, log: true, band: 0 },
+  { id: 'f2', label: 'F2', min: BANDS[1].min, max: BANDS[1].max, def: Math.round(Math.sqrt(BANDS[1].min * BANDS[1].max)), unit: 'Hz', digits: 0, log: true, band: 1 },
+  { id: 'f3', label: 'F3', min: BANDS[2].min, max: BANDS[2].max, def: Math.round(Math.sqrt(BANDS[2].min * BANDS[2].max)), unit: 'Hz', digits: 0, log: true, band: 2 },
 ]
+
+// つまみの列に出すもの
+export const KNOBS = PARAMS.filter((param) => param.band === undefined)
+export const FORMANTS = PARAMS.filter((param) => param.band !== undefined)
 
 export const paramById = Object.fromEntries(PARAMS.map((param) => [param.id, param]))
 
 // 山の高さに応じて出力を下げる量（dB）。山が増えると音量が上がるので補う
 export const trimDb = (peak) => -0.65 * peak
 
-// シード付きの乱数（mulberry32）。0 以上 1 未満の値を返す関数を作る
-function mulberry32(seed) {
-  let a = seed >>> 0
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0
-    let t = a
-    t = Math.imul(t ^ (t >>> 15), t | 1)
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
-  }
-}
+// 山ごとのゆらぎの動き。速さの比と位相をずらして、3 つの山が同じ動きにならないようにする（乱数は使わない）
+export const WOBBLE = [
+  { ratio: 1, phase: 0 },
+  { ratio: 1.31, phase: 0.27 },
+  { ratio: 1.73, phase: 0.61 },
+]
 
-// 山ごと（band の番号）のゆらぎの元になる乱数の点（-1〜1）。seed と山の番号が同じなら、いつも同じ値になる
-export function seededPoints(seed, band, length) {
-  const random = mulberry32(Math.imul(Math.round(seed) + 1, 0x9e3779b1) ^ Math.imul(band + 1, 0x85ebca6b))
-  random() // 最初の値は種との相関が強いので捨てる
-  return Array.from({ length }, () => random() * 2 - 1)
-}
+// 位相（周期の数）での、山の動き（-1〜1）
+export const wobbleAt = (index, cycles) => Math.sin(2 * Math.PI * (WOBBLE[index].ratio * cycles + WOBBLE[index].phase))
 
-// depth 1 で、山が動ける範囲（対数）の端から端まで動くセント数の半分
+// 山の中心を、動ける範囲の中でランダムに選ぶ（対数で一様）。押したときだけ使い、結果は普通の値として保存される
+export const randomFormants = (random = Math.random) => Object.fromEntries(FORMANTS.map((param) => [param.id, Math.round(param.min * (param.max / param.min) ** random())]))
+
+// depth 1 で、山が中心から動くセント数（動ける範囲の幅の半分）
 export const driftCents = (band, depth) => depth * 600 * Math.log2(band.max / band.min)
 
 // WAM2 のパラメーター情報（getParameterInfo が返す形）

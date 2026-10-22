@@ -1,35 +1,13 @@
-// フォルマント・ドリフト（WAM2）。声のフォルマントにあたる 3 つの山が、ゆっくりランダムに揺らぎながら動いていく。
+// フォルマント・ドリフト（WAM2）。声のフォルマントにあたる 3 つの山が、設定した周波数を中心に、ゆっくり揺らぎながら動く。
 import { WebAudioModule } from '@webaudiomodules/sdk'
 import { CompositeAudioNode, ParamMgrFactory } from '@webaudiomodules/sdk-parammgr'
 import descriptor from '../descriptor.json'
 import { createGui } from './gui.js'
-import { BANDS, PARAMS, driftCents, paramById, parameterInfo, seededPoints, trimDb } from './params.js'
+import { BANDS, FORMANTS, PARAMS, WOBBLE, driftCents, paramById, parameterInfo, randomFormants, trimDb, wobbleAt } from './params.js'
 
-// -1〜1 の値を 1 秒に 1 つランダムに選び、間をなめらかにつないだ波形を作る。端をそろえてあるのでループしても切れ目がない。
-// 再生の速さ（playbackRate）がそのまま「1 秒に何回目標を変えるか」になる
-export const DRIFT_SECONDS = 24
-const DRIFT_RATE = 8000
-
-function driftBuffer(points, seconds = DRIFT_SECONDS, sampleRate = DRIFT_RATE) {
-  const buffer = new AudioBuffer({ length: seconds * sampleRate, sampleRate, numberOfChannels: 1 })
-  const data = buffer.getChannelData(0)
-  for (let i = 0; i < data.length; i++) {
-    const position = i / sampleRate
-    const index = Math.floor(position)
-    const t = position - index
-    const ease = t * t * (3 - 2 * t)
-    data[i] = points[index] + (points[(index + 1) % seconds] - points[index]) * ease
-  }
-  return buffer
-}
-
-// 乱数の点から、位置（秒）での値を求める。画面で山の位置を描くときに、音と同じ値を使う
-export function driftAt(points, position) {
-  const seconds = points.length
-  const wrapped = ((position % seconds) + seconds) % seconds
-  const index = Math.floor(wrapped)
-  const t = wrapped - index
-  return points[index] + (points[(index + 1) % seconds] - points[index]) * (t * t * (3 - 2 * t))
+// 山ごとの揺れ（正弦波）の波形。位相をずらしてあるので、3 つの山が同じ動きにならない
+function wobbleWave(context, phase) {
+  return new PeriodicWave(context, { real: [0, Math.sin(2 * Math.PI * phase)], imag: [0, Math.cos(2 * Math.PI * phase)] })
 }
 
 class FormantDriftNode extends CompositeAudioNode {
@@ -38,7 +16,7 @@ class FormantDriftNode extends CompositeAudioNode {
     this.audio = context
     // つまみの今の値。画面が読む
     this.values = Object.fromEntries(PARAMS.map((param) => [param.id, param.def]))
-    // ゆらぎの位置（秒）を、速さが変わっても追えるように覚えておく
+    // ゆらぎの位置（周期の数）を、速さが変わっても追えるように覚えておく
     this.phase0 = 0
     this.time0 = context.currentTime
 
@@ -57,34 +35,24 @@ class FormantDriftNode extends CompositeAudioNode {
     GainNode.prototype.connect.call(this, this.filters[0])
     this.dry.connect(this.out)
 
-    // 山ごとのゆらぎ。ループする乱数の波形を、周波数のずれ（detune、セント）に直接つなぐ（タイマーを使わないので、書き出しのような非リアルタイムの処理でも同じに動く）
+    // 山ごとのゆらぎ。位相をずらした正弦波を、周波数のずれ（detune、セント）に直接つなぐ（タイマーを使わないので、書き出しのような非リアルタイムの処理でも同じに動く）
     this.amounts = this.filters.map((filter) => {
       const amount = new GainNode(context, { gain: 0 })
       amount.connect(filter.detune)
       return amount
     })
-    this.sources = []
-    this.startSources(this.values.seed, 0)
+    this.sources = WOBBLE.map((wobble, index) => {
+      const source = new OscillatorNode(context, { frequency: wobble.ratio * this.values.rate })
+      source.setPeriodicWave(wobbleWave(context, wobble.phase))
+      source.connect(this.amounts[index])
+      source.start()
+      return source
+    })
     this.filters.forEach((filter, index) => {
       if (index > 0) this.filters[index - 1].connect(filter)
     })
     this.filters[this.filters.length - 1].connect(this.wet).connect(this.out)
     this._output = this.out
-  }
-
-  // シードに合わせた乱数の波形で、ゆらぎの音源を作り直す。offset（秒）から始めて、動いている位置を保つ
-  startSources(seed, offset) {
-    this.sources.forEach((source) => {
-      source.stop()
-      source.disconnect()
-    })
-    this.points = BANDS.map((_, index) => seededPoints(seed, index, DRIFT_SECONDS))
-    this.sources = this.points.map((points, index) => {
-      const source = new AudioBufferSourceNode(this.audio, { buffer: driftBuffer(points), loop: true, playbackRate: this.values.rate })
-      source.connect(this.amounts[index])
-      source.start(0, offset)
-      return source
-    })
   }
 
   // つまみごとの音への反映のしかた
@@ -101,11 +69,12 @@ class FormantDriftNode extends CompositeAudioNode {
         this.amounts.forEach((amount, index) => { amount.gain.value = driftCents(BANDS[index], value) })
         break
       case 'rate':
-        this.sources.forEach((source) => { source.playbackRate.value = value })
+        this.sources.forEach((source, index) => { source.frequency.value = WOBBLE[index].ratio * value })
         break
-      case 'seed':
-        // 動いている位置（秒）はそのままで、乱数だけ入れ替える
-        this.startSources(value, ((this.phaseAt(this.audio.currentTime) % DRIFT_SECONDS) + DRIFT_SECONDS) % DRIFT_SECONDS)
+      case 'f1':
+      case 'f2':
+      case 'f3':
+        this.filters[paramById[id].band].frequency.value = value
         break
       case 'mix':
         this.dry.gain.value = 1 - value * 0.6
@@ -173,18 +142,20 @@ class FormantDriftNode extends CompositeAudioNode {
     PARAMS.forEach((param) => this.setValue(param.id, param.def))
   }
 
-  // time（秒）でのゆらぎの位置（秒）。再生の速さを時間で足し合わせる
+  // time（秒）でのゆらぎの位置（周期の数）。再生の速さを時間で足し合わせる
   phaseAt(time) {
     return this.phase0 + (time - this.time0) * this.values.rate
   }
 
-  // time（秒）での、山ごとの中心周波数（Hz）。音と同じ乱数から求めるので、画面の山は音と一緒に動く
+  // time（秒）での、山ごとの中心周波数（Hz）。音と同じ式で求めるので、画面の山は音と一緒に動く
   bandFrequencies(time) {
     const phase = this.phaseAt(time)
-    return BANDS.map((band, index) => {
-      const cents = driftAt(this.points[index], phase) * driftCents(band, this.values.depth)
-      return Math.sqrt(band.min * band.max) * 2 ** (cents / 1200)
-    })
+    return BANDS.map((band, index) => this.values[FORMANTS[index].id] * 2 ** ((wobbleAt(index, phase) * driftCents(band, this.values.depth)) / 1200))
+  }
+
+  // 3 つの山の中心を、動ける範囲の中でランダムに選び直す（押したときだけ。結果は普通の値になる）
+  randomize() {
+    for (const [id, value] of Object.entries(randomFormants())) this.setValue(id, value)
   }
 
   destroy() {

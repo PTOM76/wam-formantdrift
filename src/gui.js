@@ -1,5 +1,5 @@
-// プラグインの画面。3 つの山が動く様子を描くディスプレイと、5 つのつまみ（Peak、Sharp、Drift、Rate、Mix）を持つ。
-import { BANDS, PARAMS, trimDb } from './params.js'
+// プラグインの画面。3 つの山が動く様子を描くディスプレイ（山はドラッグで動かせる）と、F1〜F3 の数値入力と Random ボタン、5 つのつまみ（Peak、Sharp、Drift、Rate、Mix）を持つ。
+import { BANDS, FORMANTS, KNOBS, trimDb } from './params.js'
 
 const ACCENT = '#4fc3f7'
 const SVG = 'http://www.w3.org/2000/svg'
@@ -129,6 +129,25 @@ function createDisplay(node, context) {
   const mag = new Float32Array(freqs.length)
   const phase = new Float32Array(freqs.length)
 
+  // F1〜F3 の印をドラッグして、山の中心周波数を動かす（一番近い山を動かす）
+  const hzAt = (event) => lowHz * (highHz / lowHz) ** (Math.min(1, Math.max(0, (event.clientX - canvas.getBoundingClientRect().left) / width)))
+  let grabbed = null
+  canvas.style.cursor = 'ew-resize'
+  canvas.style.touchAction = 'none'
+  canvas.addEventListener('pointerdown', (event) => {
+    const x = event.clientX - canvas.getBoundingClientRect().left
+    const distances = FORMANTS.map((param) => Math.abs(xOf(node.values[param.id]) - x))
+    grabbed = FORMANTS[distances.indexOf(Math.min(...distances))]
+    canvas.setPointerCapture(event.pointerId)
+    node.setValue(grabbed.id, Math.round(hzAt(event)))
+  })
+  canvas.addEventListener('pointermove', (event) => {
+    if (grabbed) node.setValue(grabbed.id, Math.round(hzAt(event)))
+  })
+  const release = () => { grabbed = null }
+  canvas.addEventListener('pointerup', release)
+  canvas.addEventListener('pointercancel', release)
+
   const draw = () => {
     const { peak, sharp, mix } = node.values
     g.clearRect(0, 0, width, height)
@@ -182,10 +201,45 @@ function createDisplay(node, context) {
       g.beginPath(); g.moveTo(xOf(hz), 14); g.lineTo(xOf(hz), height); g.stroke()
       g.fillStyle = '#cfe8f5'
       g.fillText(`F${index + 1}`, xOf(hz) - 6, 10)
+      // 設定した中心（ゆらぎの真ん中）
+      g.fillStyle = grabbed === FORMANTS[index] ? '#fff' : ACCENT
+      g.fillRect(xOf(node.values[FORMANTS[index].id]) - 2, height - 8, 4, 4)
     })
     g.setLineDash([])
   }
   return { element: canvas, draw }
+}
+
+// F1〜F3 の数値入力と、ランダムに決め直すボタン
+function createFormantRow(node) {
+  const row = el('div', 'display:flex;align-items:center;gap:6px;margin-top:8px')
+  const inputStyle = 'width:52px;padding:2px 4px;border:1px solid #05090c;border-radius:3px;background:#0b1a22;color:#cfe8f5;font:11px Consolas,monospace;text-align:right'
+  const inputs = FORMANTS.map((param) => {
+    const input = el('input', inputStyle)
+    input.type = 'number'
+    input.min = String(param.min)
+    input.max = String(param.max)
+    input.step = '1'
+    input.setAttribute('aria-label', param.label)
+    input.addEventListener('change', () => {
+      node.setValue(param.id, Number(input.value))
+      input.value = String(Math.round(node.values[param.id]))
+    })
+    const label = el('label', 'display:flex;align-items:center;gap:4px;font:600 11px/1 Segoe UI,Roboto,sans-serif;color:#cfd8dc')
+    label.append(param.label, input, el('span', 'font:10px Consolas,monospace;color:#8fb7cc', 'Hz'))
+    row.append(label)
+    return { param, input }
+  })
+  const random = el('button', 'margin-left:auto;padding:3px 10px;border:1px solid #05090c;border-radius:3px;background:#2b363e;color:#cfd8dc;font:600 11px Segoe UI,Roboto,sans-serif;cursor:pointer', 'Random')
+  random.addEventListener('click', () => node.randomize())
+  row.append(random)
+  const sync = () => {
+    for (const { param, input } of inputs) {
+      if (document.activeElement !== input) input.value = String(Math.round(node.values[param.id]))
+    }
+  }
+  sync()
+  return { element: row, sync }
 }
 
 export function createGui(node, context) {
@@ -205,15 +259,17 @@ export function createGui(node, context) {
 
   const display = createDisplay(node, context)
   const knobs = el('div', 'display:flex;justify-content:space-between;margin-top:12px;padding:10px 4px 2px;border-top:1px solid rgba(0,0,0,.45);box-shadow:0 -1px 0 rgba(255,255,255,.06)')
-  const items = PARAMS.map((param) => createKnob(param, node, `${id}-${param.id}`))
+  const formants = createFormantRow(node)
+  const items = KNOBS.map((param) => createKnob(param, node, `${id}-${param.id}`))
   items.forEach((item) => knobs.append(item.element))
-  root.append(header, display.element, knobs)
+  root.append(header, display.element, formants.element, knobs)
 
   // 画面が外されたら描画をやめる
   const frame = () => {
     if (!root.isConnected && frame.seen) return
     if (root.isConnected) frame.seen = true
     display.draw()
+    formants.sync()
     items.forEach((item) => item.sync())
     requestAnimationFrame(frame)
   }
