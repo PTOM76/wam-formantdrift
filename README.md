@@ -33,6 +33,9 @@ npm run screenshot   # retakes the GUI and saves it to screenshot.png
 
 Pushing to main makes GitHub Actions publish `dist/` with GitHub Pages. Give the host the URL of the published `index.js`.
 
+## Playback position
+If the host sends a `wam-transport` event, the wobble phase follows the playback position, so the same position always gives the same wobble on every playback and in offline rendering. Without it, the wobble runs freely from when the node was created.
+
 ---
 
 # Formant Drift (日本語)
@@ -69,3 +72,6 @@ npm run screenshot   # 画面を撮り直して screenshot.png に保存する
 ```
 
 main に push すると、GitHub Actions が `dist/` を GitHub Pages で公開する。ホストには、公開された `index.js` の URL を渡す。
+
+## 再生位置
+ホストが `wam-transport` を送ると、揺れの位相を再生位置に合わせる。同じ位置なら、再生のたびに（書き出しでも）同じ揺れになる。送られない場合は、ノードを作った時刻から自由に揺れ続ける。

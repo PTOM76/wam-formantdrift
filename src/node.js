@@ -31,6 +31,7 @@ export class FormantDriftNode extends CompositeAudioNode {
       gain: paramById.peak.def,
     }))
     this.wobbles = this.createWobbles()
+    this.startWobbles()
 
     // このノード自身（GainNode）が入力。外への connect は _output に回るので、内部への接続は GainNode の connect を直接呼ぶ
     GainNode.prototype.connect.call(this, this.dry)
@@ -41,17 +42,27 @@ export class FormantDriftNode extends CompositeAudioNode {
     this._output = this.out
   }
 
-  // 山ごとのゆらぎ。位相をずらした正弦波（source）を、揺れ幅（amount）を通して、周波数のずれ（detune、セント）に直接つなぐ
+  // 山ごとの揺れ幅（amount）を、周波数のずれ（detune、セント）に直接つなぐ。揺れの音源（source）は startWobbles で作る
   // （タイマーを使わないので、書き出しのような非リアルタイムの処理でも同じに動く）
   createWobbles() {
-    return WOBBLE.map((wobble, index) => {
+    return WOBBLE.map((_, index) => {
       const amount = new GainNode(this.audio, { gain: 0 })
       amount.connect(this.filters[index].detune)
-      const source = new OscillatorNode(this.audio, { frequency: wobble.ratio * this.values.rate })
-      source.setPeriodicWave(wobbleWave(this.audio, wobble.phase))
-      source.connect(amount)
+      return { amount, source: null }
+    })
+  }
+
+  // 揺れの音源を、今の位相（phase0、time0）から作り直して鳴らし始める。山ごとに位相をずらした正弦波にする
+  startWobbles() {
+    this.wobbles.forEach((wobble, index) => {
+      const { ratio, phase } = WOBBLE[index]
+      wobble.source?.stop()
+      wobble.source?.disconnect()
+      const source = new OscillatorNode(this.audio, { frequency: ratio * this.values.rate })
+      source.setPeriodicWave(wobbleWave(this.audio, phase + ratio * this.phase0))
+      source.connect(wobble.amount)
       source.start()
-      return { source, amount }
+      wobble.source = source
     })
   }
 
@@ -133,7 +144,20 @@ export class FormantDriftNode extends CompositeAudioNode {
   async scheduleEvents(...events) {
     for (const event of events) {
       if (event.type === 'wam-automation' && paramById[event.data?.id]) this.setUpdate(event.data.id, event.data)
+      if (event.type === 'wam-transport' && event.data) this.syncTransport(event.data)
     }
+  }
+
+  // ホストの再生位置（wam-transport）に、揺れの位相を合わせる。
+  // 位置 0 の揺れは常に同じ位相から始まるので、同じ位置を再生すれば、再生のたびに（書き出しでも）同じ揺れになる
+  syncTransport({ currentBar, currentBarStarted, tempo, timeSigNumerator = 4, timeSigDenominator = 4 }) {
+    if (![currentBar, currentBarStarted, tempo].every(Number.isFinite) || tempo <= 0) return
+    const barSeconds = (60 / tempo) * timeSigNumerator * (4 / timeSigDenominator)
+    const zero = currentBarStarted - currentBar * barSeconds // 位置 0 にあたる context の時刻
+    const now = this.audio.currentTime
+    this.time0 = now
+    this.phase0 = (now - zero) * this.values.rate
+    this.startWobbles()
   }
 
   setup(wamNode) {

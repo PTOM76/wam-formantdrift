@@ -1,11 +1,11 @@
-// 同じ F1〜F3 の描画が一致し、違う値の描画が違うことと、Random の結果が範囲内であることを確かめる。
+// 同じ F1〜F3 の描画が一致し、違う値の描画が違うことと、Random の結果が範囲内であること、再生位置から始めた揺れが頭から通した揺れと一致することを確かめる。
 import { build } from 'esbuild'
 import { openPage } from './browser.mjs'
 
 await build({ entryPoints: ['test/formants.js'], outfile: 'test/out/formants.js', bundle: true, format: 'esm', target: 'es2022' })
 const page = await openPage('formants.js')
 const result = JSON.parse(await page.evaluate('window.__run()'))
-const ok = result.same === 0 && result.other > 0.01 && result.inRange
+const ok = result.same === 0 && result.other > 0.01 && result.inRange && result.aligned < 0.02 && result.unaligned > 0.05
 console.log(ok ? 'OK' : 'NG', JSON.stringify(result))
 page.close()
 process.exit(ok ? 0 : 1)
