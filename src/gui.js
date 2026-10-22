@@ -188,9 +188,9 @@ function createDisplay(node, context) {
 export function createGui(node, context) {
   const id = `fd${Math.random().toString(36).slice(2, 7)}`
   const root = el('div', [
-    'box-sizing:border-box;width:392px;padding:14px 14px 12px;border-radius:12px',
-    'background:linear-gradient(180deg,#34414b,#1b232a);border:1px solid #0b1014',
-    'box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 6px 18px rgba(0,0,0,.35)',
+    // 外枠は角を丸めず、ホストの枠にそのまま収まるようにする
+    'box-sizing:border-box;width:392px;padding:14px 14px 12px',
+    'background:linear-gradient(180deg,#34414b,#1b232a)',
     'font-family:Segoe UI,Roboto,sans-serif;color:#cfd8dc',
   ].join(';'))
 

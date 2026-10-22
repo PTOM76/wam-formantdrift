@@ -6,7 +6,7 @@ async function main() {
   const context = new AudioContext()
   const [hostGroupId] = await initializeWamHost(context)
   const wam = await FormantDrift.createInstance(hostGroupId, context)
-  document.body.style.cssText = 'margin:0;padding:16px;background:#eceff1;display:inline-block'
+  document.body.style.cssText = 'margin:0;display:inline-block;line-height:0'
   document.body.append(await wam.createGui())
   window.__node = wam.audioNode
   window.__wam = wam

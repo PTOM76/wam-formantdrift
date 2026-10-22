@@ -22,7 +22,7 @@
 ```sh
 npm ci
 npm run build   # dist/index.js と dist/descriptor.json を作る（SDK を同梱した ES モジュール）
-npm test   # Chrome（headless）で OfflineAudioContext に通し、音が出ることと、スペクトルが動くことを確かめる
+npm test   # Chrome（headless）で、音が出てスペクトルが動くこと、つまみの値が読み書きできること、画面のつまみの操作が戻らないことを確かめる
 npm run screenshot   # 画面を撮り直して screenshot.png に保存する
 ```
 

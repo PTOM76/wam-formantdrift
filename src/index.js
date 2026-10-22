@@ -3,7 +3,7 @@ import { WebAudioModule } from '@webaudiomodules/sdk'
 import { CompositeAudioNode, ParamMgrFactory } from '@webaudiomodules/sdk-parammgr'
 import descriptor from '../descriptor.json'
 import { createGui } from './gui.js'
-import { BANDS, PARAMS, driftCents, trimDb } from './params.js'
+import { BANDS, PARAMS, driftCents, paramById, parameterInfo, trimDb } from './params.js'
 
 // -1〜1 の値を 1 秒に 1 つランダムに選び、間をなめらかにつないだ波形を作る。端をそろえてあるのでループしても切れ目がない。
 // 再生の速さ（playbackRate）がそのまま「1 秒に何回目標を変えるか」になる
@@ -73,42 +73,85 @@ class FormantDriftNode extends CompositeAudioNode {
     this._output = this.out
   }
 
-  // つまみごとの反映のしかた。値を覚えてから音に反映する
-  get paramConfig() {
-    const apply = {
-      peak: (value) => {
+  // つまみごとの音への反映のしかた
+  applyParam(id, value) {
+    switch (id) {
+      case 'peak':
         this.filters.forEach((filter) => { filter.gain.value = value })
         this.out.gain.value = 10 ** (trimDb(value) / 20)
-      },
-      sharp: (value) => this.filters.forEach((filter, index) => { filter.Q.value = BANDS[index].q * value }),
-      depth: (value) => this.sources.forEach(({ amount }, index) => { amount.gain.value = driftCents(BANDS[index], value) }),
-      rate: (value) => {
-        this.phase0 = this.phaseAt(this.audio.currentTime)
-        this.time0 = this.audio.currentTime
+        break
+      case 'sharp':
+        this.filters.forEach((filter, index) => { filter.Q.value = BANDS[index].q * value })
+        break
+      case 'depth':
+        this.sources.forEach(({ amount }, index) => { amount.gain.value = driftCents(BANDS[index], value) })
+        break
+      case 'rate':
         this.sources.forEach(({ source }) => { source.playbackRate.value = value })
-      },
-      mix: (value) => {
+        break
+      case 'mix':
         this.dry.gain.value = 1 - value * 0.6
         this.wet.gain.value = value
-      },
+        break
     }
-    return Object.fromEntries(PARAMS.map((param) => [param.id, {
-      defaultValue: param.def,
-      minValue: param.min,
-      maxValue: param.max,
-      // onChange に渡る値は、最小値を引いたもの（パラメーターマネージャーの作り）なので、足して戻す
-      onChange: (offset) => {
-        const value = offset + param.min
-        // rate は、変える前の速さで位置を進めてから新しい値にする
-        if (param.id === 'rate') apply.rate(value)
-        this.values[param.id] = value
-        if (param.id !== 'rate') apply[param.id](value)
-      },
-    }]))
+  }
+
+  // つまみの値を変える。値はここで持つ（パラメーターマネージャーの値は、音を鳴らしていない OfflineAudioContext では更新されず、
+  // 読むと古い値や最小値だけずれた値が返るので、読み書きともこのノードで行う）
+  setValue(id, raw) {
+    const param = paramById[id]
+    if (!param || !Number.isFinite(raw)) return
+    const value = Math.min(param.max, Math.max(param.min, raw))
+    // rate は、変える前の速さで位置を進めてから新しい速さにする
+    if (id === 'rate') {
+      this.phase0 = this.phaseAt(this.audio.currentTime)
+      this.time0 = this.audio.currentTime
+    }
+    this.values[id] = value
+    this.applyParam(id, value)
+  }
+
+  // WAM2 のパラメーターの API（パラメーターマネージャーを通さず、このノードで答える）
+  async setParameterValues(updates) {
+    for (const [id, update] of Object.entries(updates)) {
+      const param = paramById[id]
+      if (!param) continue
+      this.setValue(id, update.normalized ? param.min + update.value * (param.max - param.min) : update.value)
+    }
+  }
+
+  async getParameterValues(normalized = false, ...ids) {
+    const wanted = ids.length ? ids : PARAMS.map((param) => param.id)
+    return Object.fromEntries(wanted.filter((id) => paramById[id]).map((id) => {
+      const param = paramById[id]
+      const value = normalized ? (this.values[id] - param.min) / (param.max - param.min) : this.values[id]
+      return [id, { id, value, normalized }]
+    }))
+  }
+
+  async getParameterInfo(...ids) {
+    const wanted = ids.length ? ids : PARAMS.map((param) => param.id)
+    return Object.fromEntries(wanted.filter((id) => paramById[id]).map((id) => [id, parameterInfo(paramById[id])]))
+  }
+
+  async getState() {
+    return { ...this.values }
+  }
+
+  async setState(state) {
+    for (const [id, value] of Object.entries(state ?? {})) this.setValue(id, Number(value))
+  }
+
+  // 時刻つきの変更（オートメーション）は、届いた時点で値を変える
+  async scheduleEvents(...events) {
+    for (const event of events) {
+      if (event.type === 'wam-automation' && event.data) this.setValue(event.data.id, event.data.normalized ? paramById[event.data.id].min + event.data.value * (paramById[event.data.id].max - paramById[event.data.id].min) : event.data.value)
+    }
   }
 
   setup(wamNode) {
     this._wamNode = wamNode
+    PARAMS.forEach((param) => this.setValue(param.id, param.def))
   }
 
   // time（秒）でのゆらぎの位置（秒）。再生の速さを時間で足し合わせる
@@ -140,7 +183,10 @@ export default class FormantDrift extends WebAudioModule {
 
   async createAudioNode(initialState) {
     const node = new FormantDriftNode(this.audioContext)
-    const paramMgr = await ParamMgrFactory.create(this, { internalParamsConfig: node.paramConfig })
+    // パラメーターマネージャーは、イベントの受け渡しや破棄などの土台として使う（つまみの値の読み書きはノード自身が行う）
+    const paramMgr = await ParamMgrFactory.create(this, {
+      internalParamsConfig: Object.fromEntries(PARAMS.map((param) => [param.id, { defaultValue: param.def, minValue: param.min, maxValue: param.max }])),
+    })
     node.setup(paramMgr)
     if (initialState) await node.setState(initialState)
     return node

@@ -6,7 +6,7 @@
   "scripts": {
     "build": "node build.mjs",
     "screenshot": "node test/screenshot.mjs",
-    "test": "node test/run.mjs"
+    "test": "node test/run.mjs && node test/offline.mjs && node test/interact.mjs"
   },
   "dependencies": {
     "@webaudiomodules/api": "^2.0.0-alpha.6",

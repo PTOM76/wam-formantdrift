@@ -23,3 +23,20 @@ export const trimDb = (peak) => -0.65 * peak
 
 // depth 1 で、山が動ける範囲（対数）の端から端まで動くセント数の半分
 export const driftCents = (band, depth) => depth * 600 * Math.log2(band.max / band.min)
+
+// WAM2 のパラメーター情報（getParameterInfo が返す形）
+export const parameterInfo = (param) => ({
+  id: param.id,
+  label: param.label,
+  type: 'float',
+  defaultValue: param.def,
+  minValue: param.min,
+  maxValue: param.max,
+  discreteStep: 0,
+  exponent: 0,
+  choices: [],
+  units: param.percent ? '%' : param.unit ?? '',
+  normalize: (value) => (value - param.min) / (param.max - param.min),
+  denormalize: (position) => param.min + position * (param.max - param.min),
+  valueString: (value) => (param.percent ? `${Math.round(value * 100)}%` : `${value.toFixed(param.digits)} ${param.unit}`),
+})
