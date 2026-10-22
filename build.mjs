@@ -12,5 +12,5 @@ await build({
   minify: true,
 })
 await copyFile('descriptor.json', 'dist/descriptor.json')
-await copyFile('screenshot.svg', 'dist/screenshot.svg').catch(() => {})
+await copyFile('index.html', 'dist/index.html')
 console.log('dist/index.js を作りました')

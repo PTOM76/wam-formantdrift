@@ -1,0 +1,40 @@
+<!DOCTYPE HTML>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Formant Drift | Web Audio Module</title>
+	</head>
+	<body>
+		<h1>Formant Drift</h1>
+		A Web Audio Module (WAM2) effect. Three formant-like peaks slowly and randomly wander over time, so a voice keeps changing its vowel color.<br />
+		It is not tied to any host. Any host that supports WAM2 can load it.
+
+		<h2>Use it</h2>
+		Give this URL to a WAM2 host:
+<pre>
+https://ptom76.github.io/wam-formantdrift/index.js
+</pre>
+		◯ <a href="./descriptor.json">descriptor.json</a> | <a href="https://github.com/PTOM76/wam-formantdrift" target="_blank">Source (GitHub)</a> | <a href="https://plugins.wevocal.pitan76.net/" target="_blank">WeVocal Plugin Packages</a>
+
+		<h2>Parameters</h2>
+<pre>
+Peak   0 - 24 dB    Height of the peaks
+Sharp  0.3 - 3      Sharpness of the peaks (multiplier of Q)
+Drift  0 - 1        How far the peaks wander (1 = the whole range)
+Rate   0.02 - 3 Hz  How often a new target is chosen
+Mix    0 - 1        Amount of the effect
+</pre>
+
+		<h2>How it works</h2>
+		Three peaking filters sit in the ranges of the vowel formants (F1 280-900 Hz, F2 800-2700 Hz, F3 2300-3600 Hz).<br />
+		A looping random waveform moves each filter's frequency smoothly, on the audio thread, so it also works in offline rendering.
+
+		<h2>Info</h2>
+<pre>
+ID:      net.pitan76.formantdrift
+Type:    Effect (audio in, audio out)
+Author:  PTOM76
+</pre>
+	</body>
+</html>
