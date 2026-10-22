@@ -27,11 +27,13 @@ Sharp  0.3 - 3      Sharpness of the peaks (multiplier of Q)
 Drift  0 - 1        How far the peaks wander (1 = the whole range)
 Rate   0.02 - 3 Hz  How often a new target is chosen
 Mix    0 - 1        Amount of the effect
+Seed   0 - 99       Seed of the random drift. The same seed always gives the same movement
 </pre>
 
 		<h2>How it works</h2>
 		Three peaking filters sit in the ranges of the vowel formants (F1 280-900 Hz, F2 800-2700 Hz, F3 2300-3600 Hz).<br />
-		A looping random waveform moves each filter's frequency smoothly, on the audio thread, so it also works in offline rendering.
+		A looping random waveform moves each filter's frequency smoothly, on the audio thread, so it also works in offline rendering.<br />
+		The randomness is seeded, so the same Seed gives the same drift every time (counted from when the plugin is created).
 
 		<h2>Info</h2>
 <pre>

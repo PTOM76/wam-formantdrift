@@ -3,7 +3,7 @@ import { WebAudioModule } from '@webaudiomodules/sdk'
 import { CompositeAudioNode, ParamMgrFactory } from '@webaudiomodules/sdk-parammgr'
 import descriptor from '../descriptor.json'
 import { createGui } from './gui.js'
-import { BANDS, PARAMS, driftCents, paramById, parameterInfo, trimDb } from './params.js'
+import { BANDS, PARAMS, driftCents, paramById, parameterInfo, seededPoints, trimDb } from './params.js'
 
 // -1〜1 の値を 1 秒に 1 つランダムに選び、間をなめらかにつないだ波形を作る。端をそろえてあるのでループしても切れ目がない。
 // 再生の速さ（playbackRate）がそのまま「1 秒に何回目標を変えるか」になる
@@ -58,19 +58,33 @@ class FormantDriftNode extends CompositeAudioNode {
     this.dry.connect(this.out)
 
     // 山ごとのゆらぎ。ループする乱数の波形を、周波数のずれ（detune、セント）に直接つなぐ（タイマーを使わないので、書き出しのような非リアルタイムの処理でも同じに動く）
-    this.points = BANDS.map(() => Array.from({ length: DRIFT_SECONDS }, () => Math.random() * 2 - 1))
-    this.sources = this.filters.map((filter, index) => {
-      const source = new AudioBufferSourceNode(context, { buffer: driftBuffer(this.points[index]), loop: true, playbackRate: this.values.rate })
+    this.amounts = this.filters.map((filter) => {
       const amount = new GainNode(context, { gain: 0 })
-      source.connect(amount).connect(filter.detune)
-      source.start()
-      return { source, amount }
+      amount.connect(filter.detune)
+      return amount
     })
+    this.sources = []
+    this.startSources(this.values.seed, 0)
     this.filters.forEach((filter, index) => {
       if (index > 0) this.filters[index - 1].connect(filter)
     })
     this.filters[this.filters.length - 1].connect(this.wet).connect(this.out)
     this._output = this.out
+  }
+
+  // シードに合わせた乱数の波形で、ゆらぎの音源を作り直す。offset（秒）から始めて、動いている位置を保つ
+  startSources(seed, offset) {
+    this.sources.forEach((source) => {
+      source.stop()
+      source.disconnect()
+    })
+    this.points = BANDS.map((_, index) => seededPoints(seed, index, DRIFT_SECONDS))
+    this.sources = this.points.map((points, index) => {
+      const source = new AudioBufferSourceNode(this.audio, { buffer: driftBuffer(points), loop: true, playbackRate: this.values.rate })
+      source.connect(this.amounts[index])
+      source.start(0, offset)
+      return source
+    })
   }
 
   // つまみごとの音への反映のしかた
@@ -84,10 +98,14 @@ class FormantDriftNode extends CompositeAudioNode {
         this.filters.forEach((filter, index) => { filter.Q.value = BANDS[index].q * value })
         break
       case 'depth':
-        this.sources.forEach(({ amount }, index) => { amount.gain.value = driftCents(BANDS[index], value) })
+        this.amounts.forEach((amount, index) => { amount.gain.value = driftCents(BANDS[index], value) })
         break
       case 'rate':
-        this.sources.forEach(({ source }) => { source.playbackRate.value = value })
+        this.sources.forEach((source) => { source.playbackRate.value = value })
+        break
+      case 'seed':
+        // 動いている位置（秒）はそのままで、乱数だけ入れ替える
+        this.startSources(value, ((this.phaseAt(this.audio.currentTime) % DRIFT_SECONDS) + DRIFT_SECONDS) % DRIFT_SECONDS)
         break
       case 'mix':
         this.dry.gain.value = 1 - value * 0.6
@@ -101,7 +119,8 @@ class FormantDriftNode extends CompositeAudioNode {
   setValue(id, raw) {
     const param = paramById[id]
     if (!param || !Number.isFinite(raw)) return
-    const value = Math.min(param.max, Math.max(param.min, raw))
+    const stepped = param.step ? Math.round(raw / param.step) * param.step : raw
+    const value = Math.min(param.max, Math.max(param.min, stepped))
     // rate は、変える前の速さで位置を進めてから新しい速さにする
     if (id === 'rate') {
       this.phase0 = this.phaseAt(this.audio.currentTime)
@@ -169,7 +188,7 @@ class FormantDriftNode extends CompositeAudioNode {
   }
 
   destroy() {
-    this.sources.forEach(({ source }) => source.stop())
+    this.sources.forEach((source) => source.stop())
     return super.destroy()
   }
 }

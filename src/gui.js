@@ -20,7 +20,7 @@ const svg = (tag, attrs) => {
 // つまみの位置（0〜1）と値の変換
 const toValue = (param, t) => (param.log ? param.min * (param.max / param.min) ** t : param.min + (param.max - param.min) * t)
 const toPosition = (param, value) => (param.log ? Math.log(value / param.min) / Math.log(param.max / param.min) : (value - param.min) / (param.max - param.min))
-const format = (param, value) => (param.percent ? `${Math.round(value * 100)}%` : `${value.toFixed(param.digits)} ${param.unit}`)
+const format = (param, value) => (param.percent ? `${Math.round(value * 100)}%` : `${value.toFixed(param.digits)} ${param.unit}`.trim())
 
 // 角度（上が 0 度）の円周上の点
 const point = (radius, degrees) => {
@@ -34,8 +34,8 @@ const arc = (radius, from, to) => {
 }
 
 function createKnob(param, node, id) {
-  const wrap = el('div', 'display:grid;justify-items:center;gap:2px;width:64px;user-select:none')
-  const view = svg('svg', { viewBox: '0 0 64 64', width: 60, height: 60, tabindex: 0, role: 'slider', 'aria-label': param.label })
+  const wrap = el('div', 'display:grid;justify-items:center;gap:2px;width:58px;user-select:none')
+  const view = svg('svg', { viewBox: '0 0 64 64', width: 54, height: 54, tabindex: 0, role: 'slider', 'aria-label': param.label })
   view.style.cssText = 'cursor:ns-resize;touch-action:none;outline:none'
   view.innerHTML = `
     <defs>
@@ -65,8 +65,11 @@ function createKnob(param, node, id) {
     readout.textContent = format(param, value)
     view.setAttribute('aria-valuenow', String(value))
   }
+  // 整数のつまみは、1 つぶんの位置の幅
+  const unit = param.step ? param.step / (param.max - param.min) : 0
   const set = (t) => {
-    const value = toValue(param, Math.min(1, Math.max(0, t)))
+    const raw = toValue(param, Math.min(1, Math.max(0, t)))
+    const value = param.step ? Math.round(raw / param.step) * param.step : raw
     draw(value)
     node.setParameterValues({ [param.id]: { id: param.id, value, normalized: false } })
   }
@@ -81,7 +84,7 @@ function createKnob(param, node, id) {
     view.focus()
   })
   view.addEventListener('pointermove', (event) => {
-    if (dragging) set(startT + (startY - event.clientY) / (event.shiftKey ? 600 : 160))
+    if (dragging) set(startT + (startY - event.clientY) / (param.step ? 300 : event.shiftKey ? 600 : 160))
   })
   const stop = () => { dragging = false }
   view.addEventListener('pointerup', stop)
@@ -89,13 +92,13 @@ function createKnob(param, node, id) {
   view.addEventListener('dblclick', () => set(toPosition(param, param.def)))
   view.addEventListener('wheel', (event) => {
     event.preventDefault()
-    set(toPosition(param, shown) - event.deltaY / 1500)
+    set(toPosition(param, shown) - Math.sign(event.deltaY) * (unit || Math.abs(event.deltaY) / 1500))
   }, { passive: false })
   view.addEventListener('keydown', (event) => {
-    const step = { ArrowUp: 0.02, ArrowRight: 0.02, ArrowDown: -0.02, ArrowLeft: -0.02 }[event.key]
-    if (step === undefined) return
+    const sign = { ArrowUp: 1, ArrowRight: 1, ArrowDown: -1, ArrowLeft: -1 }[event.key]
+    if (sign === undefined) return
     event.preventDefault()
-    set(toPosition(param, shown) + step)
+    set(toPosition(param, shown) + sign * (unit || 0.02))
   })
 
   // ホストのオートメーションなど、画面の外で値が変わったときに追う
